@@ -1,5 +1,5 @@
 #!/bin/bash
-### Description: \*Arr .NET Debian install
+### Description: \*Arr Debian install
 ### Originally written for Radarr by: DoctorArr - doctorarr@the-rowlands.co.uk on 2021-10-01 v1.0
 ### Version v1.1 2021-10-02 - Bakerboy448 (Made more generic and conformant)
 ### Version v1.1.1 2021-10-02 - DoctorArr (Spellcheck and boilerplate update)
@@ -270,24 +270,24 @@ rm -rf /etc/systemd/system/$app.service
 
 # Create app .service with correct user startup
 echo "Creating service file"
+
 if [[ $app == 'bazarr' ]]; then
 cat <<EOF | tee /etc/systemd/system/$app.service >/dev/null
 [Unit]
 Description=${app^} Daemon
-After=syslog.target network.target
+After=syslog.target network.target sonarr.service radarr.service
 
-# After=syslog.target network.target sonarr.service radarr.service
 [Service]
 User=$app_uid
 Group=$app_guid
 UMask=$app_umask
 Type=simple
-ExecStart=/usr/bin/python3 $bindir/$app_bin.py
+ExecStart=/usr/bin/python3 $bindir/$app.py
 TimeoutStopSec=20
 SyslogIdentifier=bazarr
-ExecStartPre=/bin/sleep 30
 KillSignal=SIGINT
 Restart=on-failure
+
 [Install]
 WantedBy=multi-user.target
 EOF
@@ -296,6 +296,7 @@ cat <<EOF | tee /etc/systemd/system/$app.service >/dev/null
 [Unit]
 Description=${app^} Daemon
 After=network.target
+
 [Service]
 
 # Change and/or create the required user and group.
@@ -307,6 +308,7 @@ Type=simple
 TimeoutStopSec=20
 KillMode=process
 Restart=on-failure
+
 [Install]
 WantedBy=multi-user.target
 EOF
@@ -315,6 +317,7 @@ cat <<EOF | tee /etc/systemd/system/$app.service >/dev/null
 [Unit]
 Description=${app^} Daemon
 After=syslog.target network.target
+
 [Service]
 User=$app_uid
 Group=$app_guid
@@ -324,6 +327,7 @@ ExecStart=$bindir/$app_bin -nobrowser -data=$datadir
 TimeoutStopSec=20
 KillMode=process
 Restart=on-failure
+
 [Install]
 WantedBy=multi-user.target
 EOF
