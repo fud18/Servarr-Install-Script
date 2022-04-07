@@ -110,13 +110,10 @@ app_uid=$(echo "$app_uid" | tr -d ' ')
 app_uid=${app_uid:-$app}
 
 # Prompt Group
-if [[ $app == 'prowlarr' ]]; then
-    app_guid="prowlarr"
-else
     read -r -p "What group should ${app^} run as? (Default: media): " app_guid
     app_guid=$(echo "$app_guid" | tr -d ' ')
     app_guid=${app_guid:-media}
-fi
+
 echo "${app^} selected"
 echo "This will install [${app^}] to [$bindir] and use [$datadir] for the AppData Directory"
 if [[ $app == 'prowlarr' ]]; then
