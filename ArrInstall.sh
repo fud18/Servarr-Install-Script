@@ -12,6 +12,7 @@
 ### Version v3.0.4 2022-03-01 - Add sleep before checking service status
 ### Additional Updates by: The \*Arr Community
 ### Version v3.0.5 2022-03-24 - fud18 (added Sonarr & Bazarr installation)
+### Version v3.0.6 2022-04-08 - fud18 (Fixed Sonnar Installation)
 ### Boilerplate Warning
 
 #THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
@@ -22,8 +23,8 @@
 #OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 #WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-scriptversion="3.0.5"
-scriptdate="2022-03-24"
+scriptversion="3.0.6"
+scriptdate="2022-04-08"
 
 set -euo pipefail
 
@@ -183,6 +184,7 @@ if [[ $app == 'bazarr' ]]; then
 	sudo python3 -m pip install -r ${app^}/requirements.txt
 	echo ""
 	echo "Installation files downloaded and extracted"
+
 elif [[ $app == 'sonarr' ]]; then
 	echo ""
 	echo "Installing pre-requisite Packages"
@@ -192,25 +194,12 @@ elif [[ $app == 'sonarr' ]]; then
 # Add the Sonarr repository
 	sudo apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 2009837CBFFD68F45BC180471F4F90DE2A9B4BF8
 	echo "deb https://apt.sonarr.tv/ubuntu focal main" | sudo tee /etc/apt/sources.list.d/sonarr.list
-	sudo apt update && apt install $app_prereq
+	sudo apt update -y
 	echo ""
 	ARCH=$(dpkg --print-architecture)
 	
-# get arch
-	dlbase="https://services.sonarr.tv/v1/download/main/latest?version=3&os=linux"
-	case "$ARCH" in
-	"amd64") DLURL="${dlbase}&arch=x64" ;;
-	"armhf") DLURL="${dlbase}&arch=arm" ;;
-	"arm64") DLURL="${dlbase}&arch=arm64" ;;
-	*)
-		echo "Arch not supported"
-		exit 1
-		;;
-	esac
-	echo ""
-	echo "Downloading..."
-	wget --content-disposition "$DLURL"
-	tar -xvzf ${app^}.*.tar.gz
+# Install Sonarr
+	sudo apt install sonarr -y
 	echo ""
 	echo "Installation files downloaded and extracted"
 else
@@ -288,6 +277,7 @@ Restart=on-failure
 [Install]
 WantedBy=multi-user.target
 EOF
+
 elif [[ $app == 'sonarr' ]]; then
 cat <<EOF | tee /etc/systemd/system/$app.service >/dev/null
 [Unit]
@@ -309,6 +299,7 @@ Restart=on-failure
 [Install]
 WantedBy=multi-user.target
 EOF
+
 else
 cat <<EOF | tee /etc/systemd/system/$app.service >/dev/null
 [Unit]
@@ -328,6 +319,7 @@ Restart=on-failure
 [Install]
 WantedBy=multi-user.target
 EOF
+
 fi
 
 # Start the App
