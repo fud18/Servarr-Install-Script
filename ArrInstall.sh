@@ -106,14 +106,14 @@ if [[ $app != 'prowlarr' ]]; then
 fi
 
 # Prompt User
-read -r -p "What user should ${app^} run as? (Default: $app): " app_uid
+read -r -p "What user should ${app^} run as? (Default: servarr): " app_uid
 app_uid=$(echo "$app_uid" | tr -d ' ')
-app_uid=${app_uid:-$app}
+app_uid=${app_uid:-servarr}
 
 # Prompt Group
-    read -r -p "What group should ${app^} run as? (Default: media): " app_guid
+    read -r -p "What group should ${app^} run as? (Default: servarr): " app_guid
     app_guid=$(echo "$app_guid" | tr -d ' ')
-    app_guid=${app_guid:-media}
+    app_guid=${app_guid:-servarr}
 
 echo "${app^} selected"
 echo "This will install [${app^}] to [$bindir] and use [$datadir] for the AppData Directory"
