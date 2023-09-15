@@ -40,7 +40,7 @@ fi
 
 echo "Select the application to install: "
 
-select app in bazarr lidarr prowlarr radarr readarr sonarr quit; do
+select app in bazarr lidarr prowlarr radarr readarr sonarr whisparr quit; do
 
     case $app in
     bazarr)
@@ -80,6 +80,13 @@ select app in bazarr lidarr prowlarr radarr readarr sonarr quit; do
         ;;
     sonarr)
         app_port="8989"                                          # Default App Port; Modify config.xml after install if needed
+        app_prereq="curl sqlite3 mediainfo gnupg ca-certificates" # Required packages
+        app_umask="0002"                                         # UMask the Service will run as
+        branch="master"                                          # {Update me if needed} branch to install
+        break
+        ;;
+    whiparr)
+        app_port="6969"                                          # Default App Port; Modify config.xml after install if needed
         app_prereq="curl sqlite3 mediainfo gnupg ca-certificates" # Required packages
         app_umask="0002"                                         # UMask the Service will run as
         branch="master"                                          # {Update me if needed} branch to install
@@ -181,7 +188,7 @@ if [[ $app == 'bazarr' ]]; then
 	sudo unzip $app.zip -d ${app^}
 	
 #Install Python requirements
-	sudo python3 -m pip install -r ${app^}/requirements.txt
+	sudo python3 -m pip install -r ${app^}/requirements.txt --break-system-packages
 	echo ""
 	echo "Installation files downloaded and extracted"
 
