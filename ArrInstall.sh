@@ -30,8 +30,8 @@
 #OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 #WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-scriptversion="3.0.11"
-scriptdate="2024-01-06"
+scriptversion="3.0.12"
+scriptdate="2024-03-08"
 
 set -euo pipefail
 
