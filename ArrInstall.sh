@@ -189,6 +189,34 @@ while true; do
         # Set ownership
         chown -R servarr:servarr /opt/bazarr
 
+        # Create app .service with correct user startup
+        echo "Creating service file"
+        cat <<EOF | tee /etc/systemd/system/"$app".service >/dev/null
+[Unit]
+Description=Bazarr Daemon
+After=syslog.target network.target
+
+# After=syslog.target network.target bazarr.service
+        
+[Service]
+WorkingDirectory=/opt/bazarr/
+User=$app_uid
+Group=$app_guid
+UMask=$app_umask
+Restart=on-failure
+RestartSec=5
+Type=simple
+ExecStart=/usr/bin/python3 /opt/bazarr/bazarr.py
+KillSignal=SIGINT
+TimeoutStopSec=20
+SyslogIdentifier=bazarr
+ExecStartPre=/bin/sleep 30
+
+[Install]
+WantedBy=multi-user.target
+
+        EOF
+
     elif [[ $app_lowercase == 'sonarr' ]]; then
         rm -rf /opt/sonarr
         apt update && apt install $app_prereq -y
@@ -346,7 +374,9 @@ EOF
 
     # Ask the user if they want to install another app
     read -p "Do you want to install another app? (yes/no): " install_another
-    if [ "$install_another" != "yes" ]; then
+    install_another_lc=$(echo "$install_another" | tr '[:upper:]' '[:lower:]') # Convert to lowercase
+    
+    if [[ "$install_another_lc" != "yes" && "$install_another_lc" != "y" ]]; then
         echo "Exiting..."
         break
     fi
