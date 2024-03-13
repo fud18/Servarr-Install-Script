@@ -193,7 +193,7 @@ while true; do
         echo "Creating service file"
         cat <<EOF | tee /etc/systemd/system/"$app".service >/dev/null
 [Unit]
-Description=Bazarr Daemon
+Description=${app^} Daemon
 After=syslog.target network.target
 
 # After=syslog.target network.target bazarr.service
@@ -214,9 +214,7 @@ ExecStartPre=/bin/sleep 30
 
 [Install]
 WantedBy=multi-user.target
-
-        EOF
-
+EOF
     elif [[ $app_lowercase == 'sonarr' ]]; then
         rm -rf /opt/sonarr
         apt update && apt install $app_prereq -y
