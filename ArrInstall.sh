@@ -212,6 +212,7 @@ ExecStartPre=/bin/sleep 30
 [Install]
 WantedBy=multi-user.target
 EOF
+
     elif [[ $app_lowercase == 'sonarr' ]]; then
         rm -rf /opt/sonarr
         apt update && apt install $app_prereq -y
