@@ -195,9 +195,7 @@ while true; do
 [Unit]
 Description=${app^} Daemon
 After=syslog.target network.target
-
 # After=syslog.target network.target bazarr.service
-        
 [Service]
 WorkingDirectory=/opt/bazarr/
 User=$app_uid
@@ -211,7 +209,6 @@ KillSignal=SIGINT
 TimeoutStopSec=20
 SyslogIdentifier=bazarr
 ExecStartPre=/bin/sleep 30
-
 [Install]
 WantedBy=multi-user.target
 EOF
