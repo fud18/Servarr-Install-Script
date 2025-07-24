@@ -1,267 +1,285 @@
 #!/bin/bash
-### Description: Servarr .NET Debian install
-### Originally written for Radarr by: DoctorArr - doctorarr@the-rowlands.co.uk on 2021-10-01 v1.0
-### Version v1.1 2021-10-02 - Bakerboy448 (Made more generic and conformant)
-### Version v1.1.1 2021-10-02 - DoctorArr (Spellcheck and boilerplate update)
-### Version v2.0.0 2021-10-09 - Bakerboy448 (Refactored and ensured script is generic. Added more variables.)
-### Version v2.0.1 2021-11-23 - brightghost (Fixed datadir step to use correct variables.)
-### Version v3.0.0 2022-02-03 - Bakerboy448 (Rewrote script to prompt for user/group and made generic for all \*Arrs)
-### Version v3.0.1 2022-02-05 - aeramor (typo fix line 179: 'chown "$app_uid":"$app_uid" -R "$bindir"' -> 'chown "$app_uid":"$app_guid" -R "$bindir"')
-### Version v3.0.3 2022-02-06 - Bakerboy448 fixup ownership
-### Version v3.0.3a Readarr to develop
-### Version v3.0.4 2022-03-01 - Add sleep before checking service status
-### Version v3.0.5 2022-04-03 - VP-EN (Added Whisparr)
-### Version v3.0.6 2022-04-26 - Bakerboy448 - binaries to group
-### Version v3.0.7 2023-01-05 - Bakerboy448 - Prowlarr to master
-### Version v3.0.8 2023-04-20 - Bakerboy448 - Shellcheck fixes & remove prior tarballs
-### Version v3.0.9 2023-04-28 - Bakerboy448 - fix tarball check
-### Version v3.0.9a 2023-07-14 - DoctorArr - updated scriptversion and scriptdate and to see how this is going! It was still at v3.0.8.
-### Version v3.0.10 2024-01-04 - Bakerboy448 - Misc updates and refactoring. Move to own script file.
-### Version v3.0.11 2024-01-06 - StevieTV - Exit script when ran from installdir
-### Version v3.0.12 2024-03-08 - fud18 - Added an option to install another app, added Sonarr & bazarr, added cleanup for downloaded installers, updated the menu options to have the first letter capitalized
-### Additional Updates by: The Servarr Community
+# ===================================================================================
+# Description: Servarr Installer & Updater with Backup, Rollback, and CLI Mode
+# Author:      Cory Funk 2025
+# ===================================================================================
 
-### Boilerplate Warning
-#THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
-#EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
-#MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
-#NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
-#LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
-#OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
-#WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-
-scriptversion="3.0.12"
-scriptdate="2024-03-08"
+scriptversion="3.4.1"
+scriptdate="2025-07-24"
 
 set -euo pipefail
 
-echo "Running Servarr Install Script - Version [$scriptversion] as of [$scriptdate]"
+# ===================================================================================
+# Colors
+# ===================================================================================
+green='\033[0;32m'
+yellow='\033[1;33m'
+red='\033[0;31m'
+reset='\033[0m'
 
-# Am I root?, need root!
+# ===================================================================================
+# Logging
+# ===================================================================================
+LOG_FILE="/var/log/servarr-install.log"
+mkdir -p "$(dirname "$LOG_FILE")"
+touch "$LOG_FILE"
 
+log() {
+    local msg="[$(date '+%Y-%m-%d %H:%M:%S')] $1"
+    echo -e "$msg" | tee -a "$LOG_FILE"
+}
+
+# ===================================================================================
+# Ensure root
+# ===================================================================================
 if [ "$EUID" -ne 0 ]; then
-    echo "Please run as root."
-    exit
+    log "${red}Please run as root!${reset}"
+    exit 1
 fi
 
-while true; do
-    echo "Select the application to install: "
+# ===================================================================================
+# CLI Flags
+# ===================================================================================
+APP_CHOICE=""
+AUTO_YES=false
+ROLLBACK_APP=""
+LIST_APP=""
 
-    select app in Bazarr Lidarr Prowlarr Radarr Readarr Sonarr Whisparr Quit; do
-        app_lowercase=$(echo "$app" | awk '{print tolower($0)}')
-        echo $app
-        case $app_lowercase in
-        bazarr)
-            app_port="6767"
-            app_prereq="sudo cifs-utils python3 python3-dev python3-pip git unrar ffmpeg software-properties-common qemu-guest-agent python3-setuptools python3-lxml python3-numpy"
-            app_umask="0002"
-            branch="master"
-            break
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --app)
+            APP_CHOICE="$2"
+            shift 2
             ;;
-        lidarr)
-            app_port="8686"
-            app_prereq="curl sqlite3 libchromaprint-tools mediainfo"
-            app_umask="0002"
-            branch="master"
-            break
+        --yes|--force)
+            AUTO_YES=true
+            shift
             ;;
-        prowlarr)
-            app_port="9696"
-            app_prereq="curl sqlite3"
-            app_umask="0002"
-            branch="master"
-            break
+        --rollback)
+            ROLLBACK_APP="$2"
+            shift 2
             ;;
-        radarr)
-            app_port="7878"
-            app_prereq="curl sqlite3"
-            app_umask="0002"
-            branch="master"
-            break
-            ;;
-        readarr)
-            app_port="8787"
-            app_prereq="curl sqlite3"
-            app_umask="0002"
-            branch="develop"
-            break
-            ;;
-        sonarr)
-            app="sonarr"
-            app_port="8989"
-            app_prereq="curl sqlite3 wget"
-            app_umask="0002"
-            branch="main"
-            break
-            ;;
-        whisparr)
-            app_port="6969"
-            app_prereq="curl sqlite3"
-            app_umask="0002"
-            branch="nightly"
-            break
-            ;;
-        quit)
-            break
+        --list-backups)
+            LIST_APP="$2"
+            shift 2
             ;;
         *)
-            echo "Invalid option $REPLY"
+            log "Unknown parameter: $1"
+            exit 1
             ;;
-        esac
+    esac
+done
+
+# ===================================================================================
+# Backup & Rollback Functions
+# ===================================================================================
+BACKUP_DIR="/opt/backups"
+
+create_backup() {
+    local app_display="$1"
+    local bindir="$2"
+
+    mkdir -p "$BACKUP_DIR/$app_display"
+    local timestamp
+    timestamp=$(date +'%Y-%m-%d_%H%M%S')
+    local backup_file="$BACKUP_DIR/$app_display/${app_display}_${timestamp}.tar.gz"
+
+    log "[INFO] Creating backup at $backup_file"
+    tar -czf "$backup_file" -C "$(dirname "$bindir")" "$(basename "$bindir")"
+
+    # Rotate backups (keep 3 most recent)
+    local backups
+    backups=($(ls -t "$BACKUP_DIR/$app_display"/*.tar.gz 2>/dev/null || true))
+    if (( ${#backups[@]} > 3 )); then
+        for ((i=3; i<${#backups[@]}; i++)); do
+            log "[INFO] Removing old backup ${backups[$i]}"
+            rm -f "${backups[$i]}"
+        done
+    fi
+}
+
+list_backups() {
+    local app_display="$1"
+    if [[ -d "$BACKUP_DIR/$app_display" ]]; then
+        log "[INFO] Available backups for $app_display:"
+        ls -t "$BACKUP_DIR/$app_display"/*.tar.gz | nl
+    else
+        log "[INFO] No backups found for $app_display."
+    fi
+}
+
+rollback_backup() {
+    local app_display="$1"
+    if [[ ! -d "$BACKUP_DIR/$app_display" ]]; then
+        log "${red}No backups found for $app_display.${reset}"
+        exit 1
+    fi
+
+    local backups
+    backups=($(ls -t "$BACKUP_DIR/$app_display"/*.tar.gz))
+    log "[INFO] Backups available for $app_display:"
+    for i in "${!backups[@]}"; do
+        echo "$((i+1))) ${backups[$i]}"
     done
 
-    if [ "$app" = "Quit" ]; then
-        echo "Exiting..."
-        break
-    fi
+    read -r -p "Select a backup number to restore (default: 1): " selection
+    selection=${selection:-1}
+    local backup_file="${backups[$((selection-1))]}"
 
-    # Constants
-    ### Update these variables as required for your specific instance
-    installdir="/opt" # {Update me if needed} Install Location
-    bindir="${installdir}/${app^}" # Full Path to Install Location
-    datadir="/var/lib/$app/" # {Update me if needed} AppData directory to use
-    app_bin=${app^} # Binary Name of the app
+    log "[INFO] Restoring $backup_file"
+    rm -rf "/opt/$app_display"
+    tar -xzf "$backup_file" -C /opt/
 
-    if [[ $app_lowercase != 'prowlarr' ]]; then
-        echo "It is critical that the user and group you select to run ${app} as will have READ and WRITE access to your Media Library and Download Client Completed Folders"
-    fi
+    log "[INFO] Restarting service..."
+    systemctl daemon-reload
+    systemctl restart "$(echo "$app_display" | tr '[:upper:]' '[:lower:]').service"
+    log "${green}Rollback complete.${reset}"
+    exit 0
+}
 
-    # This script should not be ran from installdir, otherwise later in the script the extracted files will be removed before they can be moved to installdir.
-    if [ "$installdir" == "$(dirname -- "$(readlink -f -- "$0";)")" ] || [ "$bindir" == "$(dirname -- "$(readlink -f -- "$0";)")" ]; then
-        echo "You should not run this script from the intended install directory. The script will exit. Please re-run it from another directory"
-        exit
-    fi
+# ===================================================================================
+# Handle List or Rollback Commands
+# ===================================================================================
+if [[ -n "$LIST_APP" ]]; then
+    list_backups "$LIST_APP"
+    exit 0
+fi
 
-    # Prompt User
-    read -r -p "What user should ${app} run as? (Default: servarr): " app_uid
-    app_uid=$(echo "$app_uid" | tr -d ' ')
-    app_uid=${app_uid:-servarr}
-    # Prompt Group
-    read -r -p "What group should ${app} run as? (Default: servarr): " app_guid
-    app_guid=$(echo "$app_guid" | tr -d ' ')
-    app_guid=${app_guid:-servarr}
+if [[ -n "$ROLLBACK_APP" ]]; then
+    rollback_backup "$ROLLBACK_APP"
+    exit 0
+fi
 
-    echo "${app} selected"
-    echo "This will install [${app}] to [$bindir] and use [$datadir] for the AppData Directory"
-    if [[ $app_lowercase != 'prowlarr' ]]; then
-        echo "${app} will run as the user [$app_uid] and group [$app_guid]."
+# ===================================================================================
+# Main Menu
+# ===================================================================================
+log "${yellow}Running Servarr Install Script - Version [$scriptversion] as of [$scriptdate]${reset}"
+
+select_app() {
+    if [[ -n "$APP_CHOICE" ]]; then
+        choice="$APP_CHOICE"
     else
-        echo "${app} will run as the user [$app_uid] and group [$app_guid]. By continuing, you've confirmed that that user and group will have READ and WRITE access to your Media Library and Download Client Completed Download directories"
+        echo ""
+        echo "Select the application to install/update:"
+        echo ""
+        select choice in Bazarr Lidarr Prowlarr Radarr Readarr Sonarr "Whisparr-v2" "Whisparr-v3" Quit; do
+            [[ -n "$choice" ]] && break
+        done
     fi
-    # read -n 1 -r -s -p $'Press enter to continue or ctrl+c to exit...\n'
+}
 
-    # Create User / Group as needed
-    if [ "$app_guid" != "$app_uid" ]; then
-        if ! getent group "$app_guid" >/dev/null; then
-            groupadd "$app_guid"
+while true; do
+    select_app
+    case "$(echo "$choice" | tr '[:upper:]' '[:lower:]')" in
+        bazarr) app_display="Bazarr"; app_lowercase="bazarr"; app_port="6767"; app_prereq="sudo cifs-utils python3 python3-dev python3-pip git unrar ffmpeg software-properties-common qemu-guest-agent python3-setuptools python3-lxml python3-numpy"; branch="master"; app_bin="bazarr.py" ;;
+        lidarr) app_display="Lidarr"; app_lowercase="lidarr"; app_port="8686"; app_prereq="curl sqlite3 libchromaprint-tools mediainfo"; branch="master"; app_bin="Lidarr" ;;
+        prowlarr) app_display="Prowlarr"; app_lowercase="prowlarr"; app_port="9696"; app_prereq="curl sqlite3"; branch="master"; app_bin="Prowlarr" ;;
+        radarr) app_display="Radarr"; app_lowercase="radarr"; app_port="7878"; app_prereq="curl sqlite3"; branch="master"; app_bin="Radarr" ;;
+        readarr) app_display="Readarr"; app_lowercase="readarr"; app_port="8787"; app_prereq="curl sqlite3"; branch="develop"; app_bin="Readarr" ;;
+        sonarr) app_display="Sonarr"; app_lowercase="sonarr"; app_port="8989"; app_prereq="curl sqlite3 wget"; branch="main"; app_bin="Sonarr" ;;
+        whisparr-v2) app_display="Whisparr-v2"; app_lowercase="whisparr-v2"; app_port="6969"; app_prereq="curl sqlite3"; branch="nightly"; app_bin="Whisparr" ;;
+        whisparr-v3) app_display="Whisparr-v3"; app_lowercase="whisparr-v3"; app_port="56969"; app_prereq="curl sqlite3"; branch="eros"; app_bin="Whisparr" ;;
+        quit) log "Exiting..."; exit 0 ;;
+        *) log "Invalid option."; continue ;;
+    esac
+
+    installdir="/opt/${app_display}"
+    bindir="${installdir}"
+    datadir="/var/lib/${app_display}/"
+    service_name="${app_lowercase}.service"
+    app_umask="0002"
+
+    # ===================================================================================
+    # User/Group
+    # ===================================================================================
+    if $AUTO_YES; then
+        app_uid="servarr"
+        app_guid="servarr"
+    else
+        read -r -p "What user should $app_display run as? (Default: servarr): " app_uid
+        app_uid=${app_uid:-servarr}
+        read -r -p "What group should $app_display run as? (Default: servarr): " app_guid
+        app_guid=${app_guid:-servarr}
+    fi
+
+    log "$app_display will install to $bindir and use $datadir"
+
+    if ! $AUTO_YES; then
+        read -r -p "Type 'yes' to continue: " confirm
+        [[ "$confirm" != "yes" ]] && { log "Cancelled."; continue; }
+    fi
+
+    # ===================================================================================
+    # Backup existing install
+    # ===================================================================================
+    if [[ -d "$bindir" ]]; then
+        create_backup "$app_display" "$bindir"
+    fi
+
+    # ===================================================================================
+    # Stop service
+    # ===================================================================================
+    systemctl stop "$service_name" 2>/dev/null || true
+
+    # ===================================================================================
+    # Install prerequisites
+    # ===================================================================================
+    log "[INFO] Installing prerequisites..."
+    timeout 300 apt update && apt install -y $app_prereq
+
+    # ===================================================================================
+    # Download new version
+    # ===================================================================================
+    ARCH=$(dpkg --print-architecture)
+    dlbase="https://whisparr.servarr.com/v1/update/${branch}/updatefile?os=linux&runtime=netcore"
+    case "$ARCH" in
+        amd64) DLURL="${dlbase}&arch=x64" ;;
+        armhf) DLURL="${dlbase}&arch=arm" ;;
+        arm64) DLURL="${dlbase}&arch=arm64" ;;
+        *) log "${red}Unsupported architecture${reset}"; exit 1 ;;
+    esac
+
+    log "[INFO] Downloading latest version from $DLURL"
+    wget --content-disposition "$DLURL"
+    TARBALL=$(ls Whisparr*.tar.gz)
+    tar -xzf "$TARBALL" >/dev/null 2>&1
+    rm -f "$TARBALL"
+
+    # ===================================================================================
+    # Replace old install
+    # ===================================================================================
+    rm -rf "$bindir"
+    mv Whisparr "$installdir"
+    chown -R "$app_uid":"$app_guid" "$bindir"
+    chmod 775 "$bindir"
+    mkdir -p "$datadir"
+    chown -R "$app_uid":"$app_guid" "$datadir"
+
+    # ===================================================================================
+    # Force Whisparr-v3 to Port 56969
+    # ===================================================================================
+    if [[ "$app_display" == "Whisparr-v3" ]]; then
+        config_file="${datadir}/config.xml"
+        if [[ ! -f "$config_file" ]]; then
+            log "[INFO] Creating config.xml for Whisparr-v3 with port 56969"
+            cat <<EOF > "$config_file"
+<Config>
+  <Port>56969</Port>
+</Config>
+EOF
+        else
+            log "[INFO] Updating Whisparr-v3 config.xml port to 56969"
+            sed -i 's#<Port>.*</Port>#<Port>56969</Port>#' "$config_file"
         fi
-    fi
-    if ! getent passwd "$app_uid" >/dev/null; then
-        adduser --system --no-create-home --ingroup "$app_guid" "$app_uid"
-        echo "Created and added User [$app_uid] to Group [$app_guid]"
-    fi
-    if ! getent group "$app_guid" | grep -qw "$app_uid"; then
-        echo "User [$app_uid] did not exist in Group [$app_guid]"
-        usermod -a -G "$app_guid" "$app_uid"
-        echo "Added User [$app_uid] to Group [$app_guid]"
+        chown "$app_uid":"$app_guid" "$config_file"
     fi
 
-    # Stop the App if running
-    if service --status-all | grep -Fq "$app"; then
-        systemctl stop "$app"
-        systemctl disable "$app".service
-        echo "Stopped existing $app"
-    fi
-
-    # Install Bazarr-specific dependencies and clone the repository
-    if [[ $app_lowercase == 'bazarr' ]]; then
-        rm -rf /opt/bazarr
-        # Install prerequisite packages
-        apt update && apt install $app_prereq -y
-
-        # Install additional Python packages
-        pip3 install webrtcvad-wheels --break-system-packages
-        pip3 install Pillow --break-system-packages
-
-        # Clone Bazarr repository
-        git clone https://github.com/morpheus65535/bazarr.git /opt/bazarr
-
-        # Set ownership
-        chown -R servarr:servarr /opt/bazarr
-
-        # Create app .service with correct user startup
-        echo "Creating service file"
-        cat <<EOF | tee /etc/systemd/system/"$app".service >/dev/null
+    # ===================================================================================
+    # Systemd Service
+    # ===================================================================================
+    cat <<EOF | tee /etc/systemd/system/${service_name} >/dev/null
 [Unit]
-Description=${app^} Daemon
-After=syslog.target network.target
-# After=syslog.target network.target bazarr.service
-[Service]
-WorkingDirectory=/opt/bazarr/
-User=$app_uid
-Group=$app_guid
-UMask=$app_umask
-Restart=on-failure
-RestartSec=5
-Type=simple
-ExecStart=/usr/bin/python3 /opt/bazarr/bazarr.py
-KillSignal=SIGINT
-TimeoutStopSec=20
-SyslogIdentifier=bazarr
-ExecStartPre=/bin/sleep 30
-[Install]
-WantedBy=multi-user.target
-EOF
-
-    elif [[ $app_lowercase == 'sonarr' ]]; then
-        rm -rf /opt/sonarr
-        apt update && apt install $app_prereq -y
-        mkdir -p "$datadir"
-        chown -R "$app_uid":"$app_guid" "$datadir"
-        chmod 775 "$datadir"
-        echo ""
-        echo "Installing pre-requisite Packages"
-        apt update && apt install $app_prereq
-        echo ""
-        ARCH=$(dpkg --print-architecture)
-        dlbase="https://services.sonarr.tv/v1/download/$branch/latest?version=4&os=linux"
-        case "$ARCH" in
-        "amd64") DLURL="${dlbase}&arch=x64" ;;
-        "armhf") DLURL="${dlbase}&arch=arm" ;;
-        "arm64") DLURL="${dlbase}&arch=arm64" ;;
-        *)
-            echo "Arch not supported"
-            exit 1
-            ;;
-        esac
-        echo ""
-        echo "Removing previous tarballs"
-        rm -f "${app^}".*.tar.gz
-        echo ""
-        echo "Downloading..."
-        wget --content-disposition "$DLURL"
-        tar -xvzf "${app^}".*.tar.gz
-        echo ""
-        echo "Installation files downloaded and extracted"
-        echo "Removing existing installation"
-        rm -rf "$bindir"
-        echo "Installing..."
-        mv "${app^}" $installdir
-        chown "$app_uid":"$app_guid" -R "$bindir"
-        chmod 775 "$bindir"
-        rm -rf "${app^}.*.tar.gz"
-        touch "$datadir"/update_required
-        chown "$app_uid":"$app_guid" "$datadir"/update_required
-        echo "App Installed"
-        echo "Removing old service file"
-        echo /etc/systemd/system/"${app^}".service
-        rm -rf /etc/systemd/system/"$app".service
-
-        # Create app .service with correct user startup
-        echo "Creating service file"
-        cat <<EOF | tee /etc/systemd/system/"$app".service >/dev/null
-[Unit]
-Description=${app^} Daemon
+Description=${app_display} Daemon
 After=syslog.target network.target
 [Service]
 User=$app_uid
@@ -269,111 +287,24 @@ Group=$app_guid
 UMask=$app_umask
 Type=simple
 ExecStart=$bindir/$app_bin -nobrowser -data=$datadir
-TimeoutStopSec=20
-KillMode=process
-Restart=on-failure
-[Install]
-WantedBy=multi-user.target
-EOF
-    else
-        # Create Appdata Directory
-        # AppData
-        mkdir -p "$datadir"
-        chown -R "$app_uid":"$app_guid" "$datadir"
-        chmod 775 "$datadir"
-        echo "Directories created"
-        # Download and install the App
-        # prerequisite packages
-        echo ""
-        echo "Installing pre-requisite Packages"
-        # shellcheck disable=SC2086
-        apt update && apt install $app_prereq
-        echo ""
-        ARCH=$(dpkg --print-architecture)
-        # get arch
-        dlbase="https://$app.servarr.com/v1/update/$branch/updatefile?os=linux&runtime=netcore"
-        case "$ARCH" in
-        "amd64") DLURL="${dlbase}&arch=x64" ;;
-        "armhf") DLURL="${dlbase}&arch=arm" ;;
-        "arm64") DLURL="${dlbase}&arch=arm64" ;;
-        *)
-            echo "Arch not supported"
-            exit 1
-            ;;
-        esac
-        echo ""
-        echo "Removing previous tarballs"
-        # -f to Force so we do not fail if it doesn't exist
-        rm -f "${app^}".*.tar.gz
-        echo ""
-        echo "Downloading..."
-        wget --content-disposition "$DLURL"
-        tar -xvzf "${app^}".*.tar.gz
-        echo ""
-        echo "Installation files downloaded and extracted"
-
-        # remove existing installs
-        echo "Removing existing installation"
-        rm -rf "$bindir"
-        echo "Installing..."
-        mv "${app^}" $installdir
-        chown "$app_uid":"$app_guid" -R "$bindir"
-        chmod 775 "$bindir"
-        rm -rf "${app^}.*.tar.gz"
-        # Ensure we check for an update in case user installs older version or different branch
-        touch "$datadir"/update_required
-        chown "$app_uid":"$app_guid" "$datadir"/update_required
-        echo "App Installed"
-        # Configure Autostart
-
-        # Remove any previous app .service
-        echo "Removing old service file"
-        rm -rf /etc/systemd/system/"$app".service
-    fi
-
-    # Create app .service with correct user startup
-    echo "Creating service file"
-    cat <<EOF | tee /etc/systemd/system/"$app".service >/dev/null
-[Unit]
-Description=${app^} Daemon
-After=syslog.target network.target
-[Service]
-User=$app_uid
-Group=$app_guid
-UMask=$app_umask
-Type=simple
-ExecStart=$bindir/$app_bin -nobrowser -data=$datadir
-TimeoutStopSec=20
-KillMode=process
 Restart=on-failure
 [Install]
 WantedBy=multi-user.target
 EOF
 
-    # Start the App
-    echo "Service file created. Attempting to start the app"
-    systemctl -q daemon-reload
-    systemctl enable --now -q "$app"
+    systemctl daemon-reload
+    systemctl enable "$service_name"
+    systemctl start "$service_name" || {
+        log "${red}Service failed to start. Rolling back...${reset}"
+        rollback_backup "$app_display"
+    }
 
-    # Finish Update/Installation
-    host=$(hostname -I)
-    ip_local=$(grep -oP '^\S*' <<<"$host")
-    echo ""
-    echo "Install complete"
+    log "${green}$app_display installed successfully! Access: http://$(hostname -I | awk '{print $1}'):$app_port${reset}"
 
-    STATUS="$(systemctl is-active "$app")"
-    if [ "${STATUS}" = "active" ]; then
-        echo "Browse to http://$ip_local:$app_port for the ${app} GUI"
+    if [[ -z "$APP_CHOICE" ]]; then
+        read -r -p "Install another app? (yes/no): " again
+        [[ "$again" != "yes" ]] && break
     else
-        echo "${app} failed to start"
-    fi
-
-    # Ask the user if they want to install another app
-    read -p "Do you want to install another app? (yes/no): " install_another
-    install_another_lc=$(echo "$install_another" | tr '[:upper:]' '[:lower:]') # Convert to lowercase
-    
-    if [[ "$install_another_lc" != "yes" && "$install_another_lc" != "y" ]]; then
-        echo "Exiting..."
         break
     fi
 done
